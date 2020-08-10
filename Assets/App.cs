@@ -1,0 +1,183 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+
+
+public class App : MonoBehaviour {
+    const int mid = 2;
+    const float lWallEdge = -2f;
+    const float rWallEdge =  2f;
+    const float wallWid = rWallEdge - lWallEdge;
+    GameObject cubeGO;
+    GameObject planeGO;
+    List<GameObject> gos = new List<GameObject>();
+
+
+
+    void Start () {
+        cubeGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cubeGO.transform.position = Vector3.up * 3f;
+        planeGO = GameObject.CreatePrimitive(PrimitiveType.Plane);
+
+        for (int i = 0; i < 5; i++) {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+
+            var x = 0f;
+            var y = Random.Range(3f, 10f);
+
+            if (i < 2)
+                x = lWallEdge; // make lefts 
+            if (i > 2)
+                x = rWallEdge; // make rights 
+
+            // (b)lue == (b)ottom for each side (what SHOULD be on bottom (if it matters)?) 
+            if (i == 0 || i == 4)
+                go.GetComponent<Renderer>().material.color = Color.blue;
+
+            if (i == mid) {
+                go.GetComponent<Renderer>().material.color = Color.magenta;
+                var f = 0.2f;
+                go.transform.localScale = new Vector3(f, f, f);
+            }
+
+            go.transform.position = new Vector3(x, y, 0);
+            gos.Add(go);
+        }
+    }
+
+    class ClickInfo {
+        public RaycastHit Hit; // picked object being resized 
+        public Plane Plane;
+        public Vector3 StartPos;
+        public Vector3 StartScale;
+        public Quaternion StartRot;
+    }
+    ClickInfo oldHit;
+    Camera    cam;
+    Transform cTr;
+    void Update () {
+        //if (cam == null) {
+            cam = Camera.main;
+            cTr = cam.transform;
+        //}
+
+        // distance from ceiling to floor 
+        var lDist = Vector3.Distance(gos[0].transform.position, gos[1].transform.position);
+        var rDist = Vector3.Distance(gos[3].transform.position, gos[4].transform.position);
+        var lMid =  Vector3.Lerp(gos[0].transform.position, gos[1].transform.position, 0.5f);
+        var rMid =  Vector3.Lerp(gos[3].transform.position, gos[4].transform.position, 0.5f);
+        var midOfLAndRMids = Vector3.Lerp(lMid, rMid, 0.5f);
+
+        var frac = 
+            Mathf.Min(lDist, rDist) / 
+            Mathf.Max(lDist, rDist);
+
+        gos[mid].transform.position = new Vector3(
+            midOfLAndRMids.x,//lWallEdge + wallWid * frac,
+            midOfLAndRMids.y,
+            midOfLAndRMids.z);
+
+
+        draggingAndAnchoredResizing();
+
+
+
+        void draggingAndAnchoredResizing () {
+            // WARNING FOR ANY REFACTORING... can't do Mouse0 & Mouse2 functionality simultaneously, as they use the same clickee spot for state 
+            if (Input.GetKeyUp(KeyCode.Mouse0) ||
+                Input.GetKeyUp(KeyCode.Mouse2)) 
+            {
+                oldHit = null;
+                planeGO.gameObject.SetActive(false);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Mouse0) ||
+                Input.GetKeyDown(KeyCode.Mouse2)) 
+            {
+                if (Physics.Raycast(cam.ScreenPointToRay(Input.mousePosition), out RaycastHit hit)) {
+                    if (hit.transform.name != "Cube") {
+                        planeGO.gameObject.SetActive(true);
+                        planeGO.transform.position = hit.point;
+                        planeGO.transform.up = hit.normal;
+                    }
+
+                    oldHit = new ClickInfo {
+                        Hit        = hit,
+                        Plane      = new Plane(hit.normal, hit.point),
+                        StartPos   = hit.transform.position, // the latter will get altered per-frame, anchored on StartPos 
+                        StartScale = hit.transform.localScale,
+                        StartRot   = hit.transform.rotation,
+                    };
+                    //Debug.Log("hit");
+                }
+            }
+
+            if (oldHit != null) {
+                if (Input.GetKey(KeyCode.Mouse0)) { // LMB 
+                    var ray = cam.ScreenPointToRay(Input.mousePosition);
+
+                    if (oldHit.Plane.Raycast(ray, out float hitDist)) {
+                        var v = ray.origin + ray.direction * hitDist;
+                        moveStraightInY(v);
+                        gos[mid].transform.position = v;
+                    }
+                }
+
+                if (Input.GetKey(KeyCode.Mouse2)) { // MMB 
+                    var ray = cam.ScreenPointToRay(Input.mousePosition);
+
+                    if (oldHit.Plane.Raycast(ray, out float hitDist)) {
+                        var v = ray.origin + ray.direction * hitDist;
+                        resize(v);
+                        gos[mid].transform.position = v;
+                    }
+                }
+            }
+
+
+
+            void moveStraightInY (Vector3 newSpot) {
+                var del = newSpot - oldHit.Hit.point;
+                //del.x = 0f;
+                //del.z = 0f;
+                oldHit.Hit.transform.position = // touched object updated per frame... 
+                oldHit.StartPos + del; //...anchored to cached point where click started 
+            }
+
+
+            void resize (Vector3 newSpot) {
+                var del = newSpot - oldHit.Hit.point;
+                //del.z = 0f;
+
+                // ONLY WORKS PROPERLY ON IDENTITY ORIENTED QUADS (AND THAT SAME SIDE OF A CUBE) 
+                // AND IN A 2D KINDA WAY 
+                float x  = 0f;//= oldHit.Hit.transform.position.x;
+                float y  = 0f; // = oldHit.Hit.transform.position.y;
+                float xS = 0f;// = oldHit.Hit.transform.localScale.x;
+                float yS = 0f;// = oldHit.Hit.transform.localScale.y;
+                if (oldHit.Hit.point.x < oldHit.StartPos.x) {
+                    x =  -(-del.x * 0.5f);
+                    xS = -del.x;
+                } else {
+                    x  = del.x * 0.5f;
+                    xS = del.x;
+                }
+                if (oldHit.Hit.point.y < oldHit.StartPos.y) {
+                    y = -(-del.y * 0.5f);
+                    yS = -del.y;
+                } else {
+                    y = del.y * 0.5f;
+                    yS = del.y;
+                }
+
+                oldHit.Hit.transform.position   = oldHit.StartPos   + new Vector3(x,   y, 0f);
+                oldHit.Hit.transform.localScale = oldHit.StartScale + new Vector3(xS, yS, 0f); ;
+                oldHit.Hit.transform.localScale = new Vector3(
+                    Mathf.Abs(oldHit.Hit.transform.localScale.x), 
+                    Mathf.Abs(oldHit.Hit.transform.localScale.y),
+                    Mathf.Abs(oldHit.Hit.transform.localScale.z));
+            }
+        }
+    }
+}
