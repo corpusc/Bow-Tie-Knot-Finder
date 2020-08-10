@@ -18,7 +18,9 @@ public class App : MonoBehaviour {
     void Start () {
         cubeGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cubeGO.transform.position = Vector3.up * 3f;
+        
         planeGO = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        planeGO.SetActive(false);
 
         for (int i = 0; i < 5; i++) {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -53,14 +55,11 @@ public class App : MonoBehaviour {
         public Vector3 StartScale;
         public Quaternion StartRot;
     }
-    ClickInfo oldHit;
+    ClickInfo clickee;
     Camera    cam;
-    Transform cTr;
     void Update () {
-        //if (cam == null) {
+        if (cam == null)
             cam = Camera.main;
-            cTr = cam.transform;
-        //}
 
         // distance from ceiling to floor 
         var lDist = Vector3.Distance(gos[0].transform.position, gos[1].transform.position);
@@ -69,9 +68,8 @@ public class App : MonoBehaviour {
         var rMid =  Vector3.Lerp(gos[3].transform.position, gos[4].transform.position, 0.5f);
         var midOfLAndRMids = Vector3.Lerp(lMid, rMid, 0.5f);
 
-        var frac = 
-            Mathf.Min(lDist, rDist) / 
-            Mathf.Max(lDist, rDist);
+        var frac = Mathf.Min(lDist, rDist) / 
+                   Mathf.Max(lDist, rDist);
 
         gos[mid].transform.position = new Vector3(
             midOfLAndRMids.x,//lWallEdge + wallWid * frac,
@@ -88,7 +86,7 @@ public class App : MonoBehaviour {
             if (Input.GetKeyUp(KeyCode.Mouse0) ||
                 Input.GetKeyUp(KeyCode.Mouse2)) 
             {
-                oldHit = null;
+                clickee = null;
                 planeGO.gameObject.SetActive(false);
             }
 
@@ -102,9 +100,9 @@ public class App : MonoBehaviour {
                         planeGO.transform.up = hit.normal;
                     }
 
-                    oldHit = new ClickInfo {
-                        Hit        = hit,
+                    clickee = new ClickInfo {
                         Plane      = new Plane(hit.normal, hit.point),
+                        Hit        = hit,
                         StartPos   = hit.transform.position, // the latter will get altered per-frame, anchored on StartPos 
                         StartScale = hit.transform.localScale,
                         StartRot   = hit.transform.rotation,
@@ -113,11 +111,11 @@ public class App : MonoBehaviour {
                 }
             }
 
-            if (oldHit != null) {
+            if (clickee != null) { // (editing key held after valid surface click) 
                 if (Input.GetKey(KeyCode.Mouse0)) { // LMB 
                     var ray = cam.ScreenPointToRay(Input.mousePosition);
 
-                    if (oldHit.Plane.Raycast(ray, out float hitDist)) {
+                    if (clickee.Plane.Raycast(ray, out float hitDist)) {
                         var v = ray.origin + ray.direction * hitDist;
                         moveStraightInY(v);
                         gos[mid].transform.position = v;
@@ -127,7 +125,7 @@ public class App : MonoBehaviour {
                 if (Input.GetKey(KeyCode.Mouse2)) { // MMB 
                     var ray = cam.ScreenPointToRay(Input.mousePosition);
 
-                    if (oldHit.Plane.Raycast(ray, out float hitDist)) {
+                    if (clickee.Plane.Raycast(ray, out float hitDist)) {
                         var v = ray.origin + ray.direction * hitDist;
                         resize(v);
                         gos[mid].transform.position = v;
@@ -138,45 +136,46 @@ public class App : MonoBehaviour {
 
 
             void moveStraightInY (Vector3 newSpot) {
-                var del = newSpot - oldHit.Hit.point;
+                var del = newSpot - clickee.Hit.point;
                 //del.x = 0f;
                 //del.z = 0f;
-                oldHit.Hit.transform.position = // touched object updated per frame... 
-                oldHit.StartPos + del; //...anchored to cached point where click started 
+                clickee.Hit.transform.position = // touched object updated per frame... 
+                clickee.StartPos + del; //...anchored to cached point where click started 
             }
 
 
+            // ONLY WORKS PROPERLY ON IDENTITY ORIENTED QUADS (& when cam aiming mostly north or south) 
             void resize (Vector3 newSpot) {
-                var del = newSpot - oldHit.Hit.point;
+                var del = newSpot - clickee.Hit.point;
                 //del.z = 0f;
 
-                // ONLY WORKS PROPERLY ON IDENTITY ORIENTED QUADS (AND THAT SAME SIDE OF A CUBE) 
-                // AND IN A 2D KINDA WAY 
-                float x  = 0f;//= oldHit.Hit.transform.position.x;
-                float y  = 0f; // = oldHit.Hit.transform.position.y;
-                float xS = 0f;// = oldHit.Hit.transform.localScale.x;
-                float yS = 0f;// = oldHit.Hit.transform.localScale.y;
-                if (oldHit.Hit.point.x < oldHit.StartPos.x) {
-                    x =  -(-del.x * 0.5f);
-                    xS = -del.x;
+                float x  = 0f;
+                float y  = 0f;
+                float xS = 0f;
+                float yS = 0f;
+
+                if (clickee.Hit.point.x < clickee.StartPos.x) {
+                    x  = -(-del.x * 0.5f);
+                    xS =   -del.x;
                 } else {
                     x  = del.x * 0.5f;
                     xS = del.x;
                 }
-                if (oldHit.Hit.point.y < oldHit.StartPos.y) {
-                    y = -(-del.y * 0.5f);
-                    yS = -del.y;
+
+                if (clickee.Hit.point.y < clickee.StartPos.y) {
+                    y  = -(-del.y * 0.5f);
+                    yS =   -del.y;
                 } else {
-                    y = del.y * 0.5f;
+                    y  = del.y * 0.5f;
                     yS = del.y;
                 }
 
-                oldHit.Hit.transform.position   = oldHit.StartPos   + new Vector3(x,   y, 0f);
-                oldHit.Hit.transform.localScale = oldHit.StartScale + new Vector3(xS, yS, 0f); ;
-                oldHit.Hit.transform.localScale = new Vector3(
-                    Mathf.Abs(oldHit.Hit.transform.localScale.x), 
-                    Mathf.Abs(oldHit.Hit.transform.localScale.y),
-                    Mathf.Abs(oldHit.Hit.transform.localScale.z));
+                clickee.Hit.transform.position   = clickee.StartPos   + new Vector3(x,   y, 0f);
+                clickee.Hit.transform.localScale = clickee.StartScale + new Vector3(xS, yS, 0f); ;
+                clickee.Hit.transform.localScale = new Vector3(
+                    Mathf.Abs(clickee.Hit.transform.localScale.x), 
+                    Mathf.Abs(clickee.Hit.transform.localScale.y),
+                    Mathf.Abs(clickee.Hit.transform.localScale.z));
             }
         }
     }
