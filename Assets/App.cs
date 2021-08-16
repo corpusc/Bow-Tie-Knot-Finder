@@ -48,6 +48,8 @@ public class App : MonoBehaviour {
         }
     }
 
+
+
     class ClickInfo {
         public RaycastHit Hit; // picked object being resized 
         public Plane Plane;
@@ -77,11 +79,13 @@ public class App : MonoBehaviour {
             midOfLAndRMids.z);
 
 
-        draggingAndAnchoredResizing();
+        if (!draggedOrResized()) {
+            ;
+        }
 
 
 
-        void draggingAndAnchoredResizing () {
+        bool draggedOrResized () {
             // WARNING FOR ANY REFACTORING... can't do Mouse0 & Mouse2 functionality simultaneously, as they use the same clickee spot for state 
             if (Input.GetKeyUp(KeyCode.Mouse0) ||
                 Input.GetKeyUp(KeyCode.Mouse2)) 
@@ -95,7 +99,7 @@ public class App : MonoBehaviour {
             {
                 if (Physics.Raycast(cam.ScreenPointToRay(Input.mousePosition), out RaycastHit hit)) {
                     if (hit.transform.name != "Cube") {
-                        planeGO.gameObject.SetActive(true);
+                        //planeGO.gameObject.SetActive(true);
                         planeGO.transform.position = hit.point;
                         planeGO.transform.up = hit.normal;
                     }
@@ -107,7 +111,9 @@ public class App : MonoBehaviour {
                         StartScale = hit.transform.localScale,
                         StartRot   = hit.transform.rotation,
                     };
+
                     //Debug.Log("hit");
+                    return true;
                 }
             }
 
@@ -118,7 +124,11 @@ public class App : MonoBehaviour {
                     if (clickee.Plane.Raycast(ray, out float hitDist)) {
                         var v = ray.origin + ray.direction * hitDist;
                         moveStraightInY(v);
-                        gos[mid].transform.position = v;
+                        //gos[mid].transform.position = v;
+
+                        var light  = (gos[3].transform.position - gos[0].transform.position)           ; // left blue, right white  
+                        var onNorm = (gos[4].transform.position - gos[1].transform.position).normalized; // left white, right blue
+                        gos[mid].transform.position = gos[0].transform.position + Vector3.Project(light, onNorm);
                     }
                 }
 
@@ -177,6 +187,8 @@ public class App : MonoBehaviour {
                     Mathf.Abs(clickee.Hit.transform.localScale.y),
                     Mathf.Abs(clickee.Hit.transform.localScale.z));
             }
+
+            return false;
         }
     }
 }
